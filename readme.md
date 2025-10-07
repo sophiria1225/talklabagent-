@@ -618,3 +618,308 @@ export async function search(query: string) {
   ]
 }
 ```
+
+---
+
+## 10. 新機能: 画面キャラクター表示 & ユーザーの**動き/モーション**に反応する拡張
+
+> 目的：マイク入力とは独立に、**カメラ/センサーからのモーション**で反応する UI と、**AIキャラクターの画面アニメーション**を追加する。
+>
+> 方針：モノレポの分離原則を保つため、**UIアプリは apps/**、コア処理は **packages/** に配置。イベントは `packages/shared` のプロトコル拡張でやり取り。
+
+### 10.1 追加ディレクトリ（全体像）
+
+```
+apps/
+  ├─ character-ui/                 # 画面にAIキャラクターを表示・アニメーション（Web/Electron）
+  │  ├─ src/
+  │  │  ├─ main.tsx               # Vite/Electronのエントリ（Webのみでも可）
+  │  │  ├─ app/App.tsx            # ルート。WS接続・状態管理・レイアウト
+  │  │  ├─ components/
+  │  │  │  ├─ AvatarCanvas.tsx    # キャラ描画（Lottie/Spine/Canvas/WebGL いずれか）
+  │  │  │  ├─ ReactionBubble.tsx  # 吹き出し（LLM応答/エモート）
+  │  │  │  └─ HUDStatus.tsx       # FPS/遅延/接続などのメータ
+  │  │  ├─ state/
+  │  │  │  ├─ store.ts            # Zustand/Recoil等のUI状態
+  │  │  │  └─ selectors.ts
+  │  │  ├─ services/
+  │  │  │  ├─ wsClient.ts         # WSクライアント（@lta/shared のプロトコル準拠）
+  │  │  │  └─ animator.ts         # モーション→アニメーション遷移ロジック
+  │  │  └─ assets/
+  │  │     ├─ animations/         # Lottie JSON / Spine / sprite sheets
+  │  │     └─ sounds/              # SE/BGM（必要なら）
+  │  ├─ index.html
+  │  ├─ tsconfig.json
+  │  ├─ package.json
+  │  └─ vite.config.ts             # Webビルド用（Electron併用時は electron-vite 等）
+  │
+packages/
+  ├─ motion-core/                  # カメラ/センサー入力→ポーズ/ジェスチャ推定のコア
+  │  ├─ src/
+  │  │  ├─ camera.web.ts          # WebカメラからVideoFrame取得（Web）
+  │  │  ├─ camera.native.ts       # OpenCV/MediaPipe等（ネイティブ/Electron）
+  │  │  ├─ pose-estimator.ts      # MediaPipe/MoveNet等の推定器（抽象）
+  │  │  ├─ gesture.ts             # ポーズ系列→抽象ジェスチャ（wave, nod, thumbs-up...）
+  │  │  ├─ motion-events.ts       # 推定結果→イベント発火（Observer/EventEmitter）
+  │  │  └─ types.ts               # Pose, Landmark, Gesture 定義
+  │  ├─ tsconfig.json
+  │  └─ package.json
+  │
+  ├─ avatar-engine/               # キャラクターの表情/モーション状態機械＋アニメーション命令
+  │  ├─ src/
+  │  │  ├─ statechart.ts          # xstate 等で「Idle→Listening→Thinking→Speaking→Emote」
+  │  │  ├─ mapper.ts              # Gesture/Event → AnimationClip へのマッピング
+  │  │  ├─ emote.ts               # エモート（喜/驚/困/眠）API
+  │  │  └─ types.ts               # クリップ名, レイヤ, パラメータ定義
+  │  ├─ tsconfig.json
+  │  └─ package.json
+  │
+  └─ event-bus/                   # クライアント間/プロセス間のイベント共通バス
+     ├─ src/
+     │  ├─ bus.ts                 # mitt/EventEmitter ラッパ & 型付き publish/subscribe
+     │  └─ topics.ts              # トピック名の定数化（"motion:*", "avatar:*" など）
+     ├─ tsconfig.json
+     └─ package.json
+```
+
+> 役割分担の意図：
+>
+> * **UI (apps/character-ui)** は描画と受信イベントに集中。
+> * **motion-core** は入力デバイスや推定モデル差替えを吸収。
+> * **avatar-engine** は“どのイベントでどの表情/モーションに遷移するか”の知能部分。
+> * **event-bus** は将来 Electron/マルチプロセス化した際の拡張点。
+
+### 10.2 プロトコル拡張（packages/shared）
+
+`packages/shared/src/protocol.ts` に **モーション系**と**アバター制御系**の型を追加：
+
+```ts
+export type MotionEvent = {
+  type: "motion_event";
+  source: "webcam" | "imu" | "other";
+  ts: number;
+  /** 例: 顔/骨格ランドマークの一部 */
+  pose?: { keypoints: Array<{ name: string; x: number; y: number; z?: number; score?: number }>; };
+  gesture?: { kind: "wave" | "nod" | "shake" | "thumbs_up" | "none"; score?: number };
+};
+
+export type AvatarCommand =
+  | { type: "avatar_command"; action: "state"; value: "idle" | "listening" | "thinking" | "speaking" }
+  | { type: "avatar_command"; action: "emote"; value: "joy" | "surprise" | "confused" | "sleepy" }
+  | { type: "avatar_command"; action: "play_clip"; clip: string; layer?: string };
+
+export type ServerMessage =
+  | AsrResult | LlmResult | TtsResult | RagResult
+  | { type: "error"; message: string }
+  | AvatarCommand; // サーバからUIへ表情/状態指示
+
+export type ClientMessage =
+  | ClientHello | VadEvent | AsrRequest | LlmRequest | TtsRequest | RagQuery
+  | MotionEvent; // クライアント（UI or センサー）からサーバへ
+```
+
+### 10.3 server 側の最小対応
+
+`apps/server/src/ws.ts` にモーション受信をハンドルし、必要に応じて **AvatarCommand** をブロードキャスト：
+
+```ts
+case "motion_event": {
+  // 例: "wave" を検出したら UI にエモート指示
+  if (msg.gesture?.kind === "wave" && msg.gesture.score && msg.gesture.score > 0.7) {
+    sendAll({ type: "avatar_command", action: "emote", value: "joy" });
+  }
+  break;
+}
+```
+
+### 10.4 apps/character-ui の主なファイル詳細
+
+* `components/AvatarCanvas.tsx` … Lottie/Spine/Canvas いずれかのレンダラ。`avatar-engine` から来る **AnimationClip** を再生。
+* `services/wsClient.ts` … `ServerMessage` を購読し、`AvatarCommand` に応じて state を更新。
+* `services/animator.ts` … UI内部のアニメーション制御（話速/口パク、まばたき、待機モーション）。
+* `state/store.ts` … `avatarState`（idle/listening/thinking/speaking）、`currentEmote`、`clipQueue` 等を保持。
+
+### 10.5 motion-core の主なファイル詳細
+
+* `camera.web.ts` … `getUserMedia` で `HTMLVideoElement | VideoFrame` を取得、ワーカに渡す。
+* `pose-estimator.ts` … MediaPipe/MoveNet の結果を **Pose** 型に正規化。
+* `gesture.ts` … ポーズ系列→"wave"/"nod" などの高レベル **Gesture** に分類。
+* `motion-events.ts` … 一定間隔で **MotionEvent** を publish（WS送信 or event-bus）。
+
+### 10.6 avatar-engine の主なファイル詳細
+
+* `statechart.ts` … xstate 等で状態遷移（`idle→listening→thinking→speaking`）。
+* `mapper.ts` … `Gesture`/`AvatarCommand`→ `AnimationClip` のマッピングテーブル。
+* `emote.ts` … エモート API（UI側からも直接呼べる）。
+
+### 10.7 依存追加（例）
+
+* UI（Web想定）: `react`, `react-dom`, `zustand`, `lottie-web` or `@esotericsoftware/spine-webgl`
+* 推定器: `@mediapipe/tasks-vision` or `@tensorflow-models/pose-detection`
+* 状態機械（任意）: `xstate`
+
+### 10.8 起動例
+
+* サーバ： `pnpm dev:server`
+* UI（Web）：
+
+  ```bash
+  pnpm --filter @lta/character-ui dev
+  # http://localhost:5173 を開くとキャラ表示。WSで :8787 と接続。
+  ```
+* モーション送信：UI内で `motion-core` を呼び出し、一定間隔で `MotionEvent` を WS 送信。
+
+### 10.9 将来拡張
+
+* **視線/表情（FaceMesh/Emotion）** を加え、注視検出で "listening" 遷移を強化。
+* **手指キーポイント** によるリッチジェスチャ（OK/ピース/指差し）。
+* **センサー融合**：IMU（M5Stack 等）→ `source:"imu"` で `MotionEvent` 発火。
+* **音声なし対話**：ジェスチャのみでメニュー操作・RAGクエリ発火（例：手を上げて「質問モード」）。
+
+---
+
+## 11. README 追記用テンプレート（画面キャラクター表示 & モーション反応機能）
+
+> この節は **README.md にそのまま貼り付け** できるよう、構成・ファイル一覧・最小コード・起動方法までを1箇所にまとめています。
+
+### 11.1 ディレクトリ構成（追加分）
+
+```
+apps/
+  character-ui/                 # 画面にAIキャラクターを表示・アニメーション（Web/Electron）
+    src/
+      main.tsx                 # Vite/Electronのエントリ（Webのみでも可）
+      app/App.tsx              # ルート。WS接続・状態管理・レイアウト
+      components/
+        AvatarCanvas.tsx       # キャラ描画（Lottie/Spine/Canvas/WebGL いずれか）
+        ReactionBubble.tsx     # 吹き出し（LLM応答/エモート）
+        HUDStatus.tsx          # FPS/遅延/接続などのメータ
+      state/
+        store.ts               # Zustand/Recoil等のUI状態
+        selectors.ts
+      services/
+        wsClient.ts            # WSクライアント（@lta/shared のプロトコル準拠）
+        animator.ts            # モーション→アニメーション遷移ロジック
+      assets/
+        animations/            # Lottie JSON / Spine / sprite sheets
+        sounds/                # SE/BGM（必要なら）
+    index.html
+    tsconfig.json
+    package.json
+    vite.config.ts             # Webビルド用（Electron併用時は electron-vite 等）
+
+packages/
+  motion-core/                  # カメラ/センサー入力→ポーズ/ジェスチャ推定のコア
+    src/
+      camera.web.ts            # WebカメラからVideoFrame取得（Web）
+      camera.native.ts         # OpenCV/MediaPipe等（ネイティブ/Electron）
+      pose-estimator.ts        # MediaPipe/MoveNet等の推定器（抽象）
+      gesture.ts               # ポーズ系列→抽象ジェスチャ（wave, nod, thumbs-up...）
+      motion-events.ts         # 推定結果→イベント発火（Observer/EventEmitter）
+      types.ts                 # Pose, Landmark, Gesture 定義
+    tsconfig.json
+    package.json
+
+  avatar-engine/               # キャラクターの表情/モーション状態機械＋アニメーション命令
+    src/
+      statechart.ts            # xstate 等で「Idle→Listening→Thinking→Speaking→Emote」
+      mapper.ts                # Gesture/Event → AnimationClip へのマッピング
+      emote.ts                 # エモート（喜/驚/困/眠）API
+      types.ts                 # クリップ名, レイヤ, パラメータ定義
+    tsconfig.json
+    package.json
+
+  event-bus/                   # クライアント間/プロセス間のイベント共通バス
+    src/
+      bus.ts                   # mitt/EventEmitter ラッパ & 型付き publish/subscribe
+      topics.ts                # トピック名の定数化（"motion:*", "avatar:*" など）
+    tsconfig.json
+    package.json
+```
+
+### 11.2 役割の要約
+
+* **apps/character-ui**: 描画/UI。WSでサーバと接続し、`AvatarCommand` を受けて表情/モーション変更。
+* **packages/motion-core**: カメラ/IMU等の入力→ポーズ推定→ジェスチャ認識→`MotionEvent` 発火。
+* **packages/avatar-engine**: 状態機械とアニメーションマッピングの知能層。
+* **packages/event-bus**: 型付きイベント配信（将来のElectron/マルチプロセス化を見据える）。
+
+### 11.3 共有プロトコルの拡張（`packages/shared/src/protocol.ts`）
+
+```ts
+export type MotionEvent = {
+  type: "motion_event";
+  source: "webcam" | "imu" | "other";
+  ts: number;
+  pose?: { keypoints: Array<{ name: string; x: number; y: number; z?: number; score?: number }>; };
+  gesture?: { kind: "wave" | "nod" | "shake" | "thumbs_up" | "none"; score?: number };
+};
+
+export type AvatarCommand =
+  | { type: "avatar_command"; action: "state"; value: "idle" | "listening" | "thinking" | "speaking" }
+  | { type: "avatar_command"; action: "emote"; value: "joy" | "surprise" | "confused" | "sleepy" }
+  | { type: "avatar_command"; action: "play_clip"; clip: string; layer?: string };
+
+export type ServerMessage =
+  | AsrResult | LlmResult | TtsResult | RagResult
+  | { type: "error"; message: string }
+  | AvatarCommand; // サーバ→UI：表情/状態指示
+
+export type ClientMessage =
+  | ClientHello | VadEvent | AsrRequest | LlmRequest | TtsRequest | RagQuery
+  | MotionEvent; // UI/センサー→サーバ：モーション報告
+```
+
+### 11.4 サーバ側の最小対応（`apps/server/src/ws.ts`）
+
+```ts
+case "motion_event": {
+  // 例: wave を高信頼で検出したら喜びエモートをUIに指示
+  if (msg.gesture?.kind === "wave" && (msg.gesture.score ?? 0) > 0.7) {
+    sendAll({ type: "avatar_command", action: "emote", value: "joy" });
+  }
+  break;
+}
+```
+
+> 実際には `sendAll` で UI セッションにだけ送る、セッション識別の導入などを検討してください。
+
+### 11.5 `apps/character-ui` の主な実装ポイント
+
+* `services/wsClient.ts`: WS 接続、`ServerMessage` 受信、`AvatarCommand` に応じて UI 状態を更新。
+* `components/AvatarCanvas.tsx`: Lottie/Spine/Canvas/WebGL で `AnimationClip` を再生。口パク/まばたき/待機モーション等を `animator.ts` から制御。
+* `state/store.ts`: `avatarState`（idle/listening/thinking/speaking）、`currentEmote`、`clipQueue` を保持。
+
+### 11.6 `packages/motion-core` の主な実装ポイント
+
+* `camera.web.ts`: `getUserMedia` で `VideoFrame` 取得、WebWorker に送出。
+* `pose-estimator.ts`: MediaPipe/MoveNet等の出力を共通 `Pose` 型に正規化。
+* `gesture.ts`: キーポイント系列→`wave`/`nod`/`thumbs_up` などへ分類。
+* `motion-events.ts`: 一定周期で `MotionEvent` を publish（WS送信 or event-bus）。
+
+### 11.7 依存関係の例
+
+* UI: `react`, `react-dom`, `zustand`, `lottie-web` または `@esotericsoftware/spine-webgl`
+* 推定器: `@mediapipe/tasks-vision` または `@tensorflow-models/pose-detection`
+* 状態機械（任意）: `xstate`
+
+### 11.8 セットアップ & 起動
+
+```bash
+# 依存取得
+pnpm install
+
+# サーバ起動（:8787）
+pnpm dev:server
+
+# キャラクターUIを起動（Web想定）
+pnpm --filter @lta/character-ui dev
+# → http://localhost:5173 を開く
+```
+
+### 11.9 将来拡張のヒント
+
+* 視線/表情（FaceMesh/Emotion）で注視検出→`listening` 遷移。
+* 手指キーポイントでリッチジェスチャ（OK/ピース/指差し）。
+* IMU（M5Stack 等）と融合：`source:"imu"` で `MotionEvent` を送信。
+* **音声なし対話**：ジェスチャのみでメニュー操作・RAGクエリ発火（例：手を上げて「質問モード」）。
