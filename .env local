@@ -1,0 +1,14 @@
+# Common environment variables for LabTalkAgent
+# Copy this file to .env.local and adjust values per environment.
+
+# Server settings
+LTA_SERVER_PORT=8787
+LTA_ASR_ENDPOINT=http://localhost:9001/asr
+LTA_LLM_ENDPOINT=http://localhost:11434/api/generate
+LTA_TTS_ENDPOINT=http://localhost:50021
+LTA_RAG_ENDPOINT=http://localhost:8800/query
+
+# Client settings
+LTA_WS_URL=ws://localhost:8787
+
+# TODO: Store provider API keys in environment-specific files (e.g. .env.development.local)
