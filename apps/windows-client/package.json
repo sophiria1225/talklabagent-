@@ -1,0 +1,19 @@
+{
+  "name": "@lta/windows-client",
+  "type": "module",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "tsx src/index.ts",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.10",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

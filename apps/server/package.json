@@ -1,0 +1,23 @@
+{
+  "name": "@lta/server",
+  "type": "module",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "tsx src/index.ts",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "undici": "^6.19.6",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.12",
+    "rimraf": "^5.0.10",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

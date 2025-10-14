@@ -1,0 +1,3 @@
+Placeholder for future server-specific utilities.
+
+# TODO: Move reusable orchestrator helpers (session registry, broadcast, etc.) into this module.
