@@ -1,0 +1,23 @@
+{
+  "name": "labtalkagent",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.10.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r --filter ./apps/* --filter ./packages/* run build",
+    "dev:server": "pnpm --filter @lta/server dev",
+    "dev:win": "pnpm --filter @lta/windows-client dev",
+    "dev:room": "pnpm --filter @lta/room-hub dev",
+    "dev:ui": "pnpm --filter @lta/character-ui dev",
+    "lint": "pnpm -r eslint .",
+    "format": "pnpm -r prettier --write .",
+    "clean": "pnpm -r run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11"
+  }
+}
