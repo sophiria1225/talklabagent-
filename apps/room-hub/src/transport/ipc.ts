@@ -1,8 +1,9 @@
+import type { ClientMessage } from "@lta/shared/src/protocol.js";
 import WebSocket from "ws";
 
 export interface IpcTransport {
   open(): void;
-  send(message: unknown): void;
+  send(message: ClientMessage): void;
   close(): void;
 }
 

@@ -32,6 +32,9 @@ export function createWsServer(httpServer: Server, pipeline: Pipeline) {
           case "vad":
             handleVadEvent(message, frames, ws, pipeline);
             break;
+          case "room_audio":
+            handleRoomAudio(message, ws, pipeline);
+            break;
           case "rag_query": {
             const rag = await pipeline.rag(message.query);
             send(ws, { type: "rag_result", answer: rag.answer, cites: rag.cites });
@@ -77,6 +80,19 @@ function handleVadEvent(
       void processVadFrames(capturedFrames, ws, pipeline);
       break;
   }
+}
+
+function handleRoomAudio(
+  message: Extract<ClientMessage, { type: "room_audio" }>,
+  ws: WebSocket,
+  pipeline: Pipeline,
+) {
+  const frame = message.payload;
+  if (!frame) {
+    send(ws, { type: "error", message: "room_audio_empty_payload" });
+    return;
+  }
+  void processVadFrames([frame], ws, pipeline);
 }
 
 async function processVadFrames(frames: AudioFrame[], ws: WebSocket, pipeline: Pipeline) {
