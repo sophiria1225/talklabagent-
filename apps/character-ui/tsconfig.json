@@ -3,8 +3,16 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "outDir": "dist",
-    "types": ["vite/client"]
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src"],
-  "exclude": ["dist"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "dist"
+  ]
 }

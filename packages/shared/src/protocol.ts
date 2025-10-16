@@ -32,13 +32,19 @@ export type RagQueryMessage = {
   query: string;
 };
 
+export type RoomAudioMessage = {
+  type: "room_audio";
+  payload: AudioFrame;
+};
+
 export type ClientMessage =
   | HelloMessage
   | PingMessage
   | VadStartMessage
   | VadFrameMessage
   | VadEndMessage
-  | RagQueryMessage;
+  | RagQueryMessage
+  | RoomAudioMessage;
 
 export type AsrResultMessage = {
   type: "asr_result";
