@@ -1,1 +1,14 @@
-import { useAgentStore } from \"../state/store.js\";\n+import { selectConnectionState } from \"../state/selectors.js\";\n+\n+export function HUDStatus() {\n+  const connectionState = useAgentStore(selectConnectionState);\n+\n+  return (\n+    <header className=\"hud-status\">\n+      <span className=\"status-label\">Connection:</span>\n+      <span className={`status-value status-${connectionState}`}>{connectionState}</span>\n+    </header>\n+  );\n+}\n*** End Patch
+import { useAgentStore } from "../state/store.js";
+import { selectConnectionState } from "../state/selectors.js";
+
+export function HUDStatus() {
+  const connectionState = useAgentStore(selectConnectionState);
+
+  return (
+    <header className="hud-status">
+      <span className="status-label">Connection:</span>
+      <span className={`status-value status-${connectionState}`}>{connectionState}</span>
+    </header>
+  );
+}
+
