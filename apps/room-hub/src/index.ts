@@ -1,3 +1,4 @@
+import type { RoomAudioMessage } from "@lta/shared/src/protocol.js";
 import { createRoomSource } from "./audio/roomsrc.js";
 import { createIpcTransport } from "./transport/ipc.js";
 
@@ -14,7 +15,8 @@ async function main() {
   transport.open();
 
   roomSource.onChunk((chunk) => {
-    transport.send({ type: "room_audio", payload: chunk });
+    const message: RoomAudioMessage = { type: "room_audio", payload: chunk };
+    transport.send(message);
   });
 
   await roomSource.start();

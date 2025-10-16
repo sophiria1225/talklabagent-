@@ -1,9 +1,6 @@
-export interface RoomChunk {
-  pcm: ArrayBuffer;
-  sampleRate: number;
-  channels: number;
-  frameMs: number;
-}
+import type { AudioFrame } from "@lta/shared/src/protocol.js";
+
+export type RoomChunk = AudioFrame;
 
 export interface RoomSource {
   start(): Promise<void>;
@@ -37,5 +34,11 @@ export function createRoomSource(): RoomSource {
 }
 
 function emitSilence(listener: (chunk: RoomChunk) => void) {
-  listener({ pcm: new ArrayBuffer(320), sampleRate: 16000, channels: 1, frameMs: 20 });
+  listener({
+    pcm: new ArrayBuffer(320),
+    sampleRate: 16000,
+    channels: 1,
+    frameMs: 20,
+    encoding: "LINEAR16",
+  });
 }
