@@ -11,9 +11,13 @@ export interface ClientTransport {
  */
 export function connect(url: string): ClientTransport {
   const ws = new WebSocket(url);
+  const pending: string[] = [];
 
   ws.on("open", () => {
     console.log(`[client] connected to ${url}`);
+    for (const payload of pending.splice(0, pending.length)) {
+      ws.send(payload);
+    }
   });
 
   ws.on("message", (data) => {
@@ -30,7 +34,12 @@ export function connect(url: string): ClientTransport {
 
   return {
     send(message) {
-      ws.send(JSON.stringify(message));
+      const payload = JSON.stringify(message);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      } else {
+        pending.push(payload);
+      }
     },
     close() {
       ws.close();

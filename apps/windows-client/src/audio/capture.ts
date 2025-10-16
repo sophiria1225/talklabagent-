@@ -23,6 +23,7 @@ export function createCapture(): CaptureController {
     async start() {
       running = true;
       console.log("[capture] start (stub)");
+      if (listener) emitSilenceFrame(listener);
     },
     async stop() {
       running = false;
