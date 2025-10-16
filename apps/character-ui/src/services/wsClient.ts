@@ -1,3 +1,5 @@
+import type { ServerMessage } from "@lta/shared/src/protocol.js";
+
 type Callbacks = {
   onOpen?(): void;
   onClose?(): void;
@@ -23,16 +25,16 @@ export function createWsClient(url: string, callbacks: Callbacks) {
 
   socket.addEventListener("message", (event) => {
     try {
-      const data = JSON.parse(event.data as string) as Record<string, unknown>;
+      const data = JSON.parse(event.data as string) as ServerMessage;
       switch (data.type) {
         case "asr_result":
-          callbacks.onAsrResult?.(String(data.text ?? ""));
+          callbacks.onAsrResult?.(data.text);
           break;
         case "llm_result":
-          callbacks.onLlmResult?.(String(data.text ?? ""));
+          callbacks.onLlmResult?.(data.text);
           break;
         case "tts_result": {
-          const b64 = String(data.wavBase64 ?? "");
+          const b64 = data.wavBase64;
           if (b64) {
             const binary = atob(b64);
             const bytes = new Uint8Array(binary.length);
