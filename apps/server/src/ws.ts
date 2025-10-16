@@ -1,21 +1,7 @@
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import type { Pipeline, AudioFrame } from "./pipeline/pipeline.js";
-
-type ClientMessage =
-  | { type: "hello"; client?: string; version?: string }
-  | { type: "vad"; event: "start" | "frame" | "end"; ts?: number; frame?: AudioFrame }
-  | { type: "rag_query"; query: string }
-  | { type: "ping" };
-
-type ServerMessage =
-  | { type: "hello_ack"; server: string; version: string }
-  | { type: "asr_result"; text: string }
-  | { type: "llm_result"; text: string }
-  | { type: "tts_result"; wavBase64: string }
-  | { type: "rag_result"; answer: string; cites: Array<{ title: string; page?: number; note?: string }> }
-  | { type: "pong" }
-  | { type: "error"; message: string };
+import type { Pipeline } from "./pipeline/pipeline.js";
+import type { AudioFrame, ClientMessage, ServerMessage } from "@lta/shared/src/protocol.js";
 
 /**
  * WebSocket サーバーを HTTP サーバーに紐付ける。
@@ -78,10 +64,8 @@ function handleVadEvent(
       frames.length = 0;
       break;
     case "frame":
-      if (message.frame) {
-        // TODO: バイナリ転送（ArrayBuffer）をサポートし、JSON 経由の一時オブジェクトを取り除く。
-        frames.push(message.frame);
-      }
+      // TODO: バイナリ転送（ArrayBuffer）をサポートし、JSON 経由の一時オブジェクトを取り除く。
+      frames.push(message.frame);
       break;
     case "end":
       if (frames.length === 0) {

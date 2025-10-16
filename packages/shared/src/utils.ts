@@ -6,6 +6,7 @@ export function createEmptyAudioFrame(): AudioFrame {
     sampleRate: 16000,
     channels: 1,
     frameMs: 20,
+    encoding: "LINEAR16",
   };
 }
 

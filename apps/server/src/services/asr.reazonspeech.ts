@@ -1,4 +1,4 @@
-import type { AudioFrame } from "../pipeline/pipeline.js";
+import type { AudioFrame } from "@lta/shared/src/protocol.js";
 
 /**
  * ReazonSpeech 連携用の ASR 呼び出し。
