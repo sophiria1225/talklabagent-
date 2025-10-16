@@ -1,18 +1,11 @@
 import { performance } from "node:perf_hooks";
+import type { AudioFrame } from "@lta/shared/src/protocol.js";
 import { callASR } from "../services/asr.reazonspeech.js";
 import { callLLM } from "../services/llm.ollama.js";
 import { callTTS } from "../services/tts.voicevox.js";
 import { ragAnswer } from "../services/rag.localpdf.js";
 import { createMetrics } from "./metrics.js";
 import type { ServerConfig } from "../config.js";
-
-export interface AudioFrame {
-  pcm: ArrayBuffer;
-  sampleRate: number;
-  channels: number;
-  frameMs: number;
-  encoding: string;
-}
 
 export interface RagResult {
   answer: string;

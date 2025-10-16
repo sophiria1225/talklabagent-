@@ -12,7 +12,10 @@
     "verbatimModuleSyntax": true,
     "allowJs": false,
     "noEmit": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@lta/shared/src/*": ["packages/shared/src/*"]
+    }
   },
   "include": ["packages", "apps"]
 }

@@ -75,11 +75,14 @@ export type ServerMessage =
   | { type: "hello_ack"; server: string; version: string }
   | { type: "pong" };
 
+export type AudioEncoding = "LINEAR16" | "FLOAT32";
+
 export interface AudioFrame {
   pcm: ArrayBuffer;
   sampleRate: number;
   channels: number;
   frameMs: number;
+  encoding: AudioEncoding;
 }
 
 // TODO: プロトコルバージョニングとメッセージスキーマ検証を導入する。
